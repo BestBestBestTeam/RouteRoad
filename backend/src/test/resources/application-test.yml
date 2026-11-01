@@ -1,0 +1,10 @@
+# Future PostgreSQL integration tests must provide connection properties
+# through Testcontainers (for example, via @DynamicPropertySource).
+# No fallback URL, credentials, or embedded database are configured here.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
