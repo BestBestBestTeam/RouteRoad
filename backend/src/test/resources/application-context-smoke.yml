@@ -1,0 +1,9 @@
+# Temporary context smoke check only; not packaged in the application JAR.
+# Real database profiles must never inherit this exclusion.
+spring:
+  config:
+    activate:
+      on-profile: "context-smoke & !local & !test"
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration

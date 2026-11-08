@@ -21,8 +21,15 @@ class ConfigurationProfilesTests {
 			.withInitializer(new ConfigDataApplicationContextInitializer());
 
 	@Test
-	void defaultConfigurationAllowsBootstrapWithoutDatabase() {
+	void dataSourceExclusionIsOnlyEnabledForContextSmokeProfile() {
 		contextRunner.run(context -> {
+			assertThat(context).hasNotFailed();
+			List<String> exclusions = Binder.get(context.getEnvironment())
+					.bind("spring.autoconfigure.exclude", Bindable.listOf(String.class))
+					.orElse(List.of());
+			assertThat(exclusions).doesNotContain(DATA_SOURCE_AUTO_CONFIGURATION);
+		});
+		contextRunner.withPropertyValues("spring.profiles.active=context-smoke").run(context -> {
 			assertThat(context).hasNotFailed();
 			List<String> exclusions = Binder.get(context.getEnvironment())
 					.bind("spring.autoconfigure.exclude", Bindable.listOf(String.class))
@@ -32,7 +39,7 @@ class ConfigurationProfilesTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"local", "test", "local,test"})
+	@ValueSource(strings = {"local", "test", "local,test", "local,context-smoke", "test,context-smoke", "local,test,context-smoke"})
 	void databaseProfilesDoNotInheritBootstrapExclusion(String profiles) {
 		contextRunner.withPropertyValues("spring.profiles.active=" + profiles).run(context -> {
 			assertThat(context).hasNotFailed();

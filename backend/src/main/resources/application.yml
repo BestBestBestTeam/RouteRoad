@@ -1,14 +1,3 @@
 spring:
   application:
     name: routeroad-backend
-
----
-# Temporary bootstrap mode. Remove this document when PostgreSQL is configured.
-# Never disable the DataSource for local or future Testcontainers tests.
-spring:
-  config:
-    activate:
-      on-profile: "!local & !test"
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
