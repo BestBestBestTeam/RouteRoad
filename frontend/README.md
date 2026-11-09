@@ -69,6 +69,7 @@ npm run build
 
 ## Документация
 
+- [Требования к MVP](docs/mvp-requirements.md)
 - [Архитектура и структура проекта](docs/frontend-architecture.md)
 - [Единый контракт для Java: сущности и HTTP API](docs/frontend-api.md)
 - [Внутренний контракт Java/Python](docs/entity.md)
