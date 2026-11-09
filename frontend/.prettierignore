@@ -1,0 +1,9 @@
+node_modules
+dist
+.artifacts
+.npm-cache
+package-lock.json
+public/assets
+docs/entity.md
+docs/vision.md
+docs/tz.txt

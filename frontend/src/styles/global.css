@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --color-ink: #1d1d1f;
+  --color-muted: #737780;
+  --color-canvas: #f5f6f7;
+  --color-line: #ebedef;
+  --color-accent: #ffdd2d;
+  --color-accent-soft: #fff7cc;
+  --color-success: #16815d;
+  --color-danger: #c74738;
+  --color-info: #377dee;
+}
+
+@layer base {
+  html {
+    color: var(--color-ink);
+    background: var(--color-canvas);
+    font-family: var(--font-sans);
+  }
+  body {
+    margin: 0;
+    min-width: 320px;
+  }
+  button,
+  a,
+  input,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-info);
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-ink);
+  }
+  dialog::backdrop {
+    background: rgb(29 29 31 / 30%);
+  }
+}
