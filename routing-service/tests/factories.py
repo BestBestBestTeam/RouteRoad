@@ -23,7 +23,7 @@ from app.core.model import (
 )
 from app.core.time_matrix import HaversineMatrix, SupportsLatLon
 
-TZ = timezone(timedelta(hours=7))
+TZ = timezone(timedelta(hours=7))  # Новосибирск, +07:00
 MONDAY = date(2026, 11, 9)
 BASE_LAT, BASE_LON = 55.7510, 37.6180
 
@@ -61,10 +61,12 @@ def make_order(
     lat: float,
     lon: float,
     version: int = 1,
+    address: str = "Синтедная ул., 1",
 ) -> Order:
     return Order(
         id=uuid4(),
         client_name=name,
+        address=address,
         lat=lat,
         lon=lon,
         window_from=window_from,

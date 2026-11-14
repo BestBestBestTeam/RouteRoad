@@ -1,21 +1,31 @@
 """Корневая модель задачи назначения и маршрутизации: без базы данных и HTTP.
 
-Конвенции взяты из docs/contract.md: snake_case в полях, ISO 8601 с таймзоной,
-длительности в секундах, расстояния в метрах, идентификаторы UUID.
+Конвенции взяты из docs/contract-python.md: snake_case в полях, ISO 8601 с
+таймзоной, длительности в секундах, расстояния в метрах, идентификаторы UUID,
+версии Long — десятичной строкой в JSON.
 
-* ``window_to`` ограничивает *начало* встречи: встреча может закончиться после
-  окна, если укладывается в смену; приехать раньше — это ожидание, не нарушение;
+* По контракту ``window_to`` ограничивает *начало* встречи: встреча может
+  закончиться после окна, если укладывается в смену; приехать раньше — это
+  ожидание, не нарушение;
 * окна — абсолютные datetime; ``service_date`` — организационная метка дня, а
   DEFER_NEXT_DAY означает, что ядро лишь сообщает причину — заказ сдвигает Java.
 """
 from __future__ import annotations
 
 import enum
+import re
 from datetime import date
-from typing import Optional
+from typing import Annotated, Any, Optional
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    PlainSerializer,
+    model_validator,
+)
 
 
 class Algorithm(str, enum.Enum):
@@ -24,8 +34,8 @@ class Algorithm(str, enum.Enum):
 
 
 class WindowMode(str, enum.Enum):
+    # hard в контракте нет: нарушение окна допускается со штрафом.
     SOFT = "soft"
-    HARD = "hard"
 
 
 class StopType(str, enum.Enum):
@@ -66,6 +76,26 @@ UNASSIGNED_REASONS = frozenset(
 )
 
 
+_DECIMAL = re.compile(r"\d+")
+
+
+def _version_to_int(value: Any) -> Any:
+    # Long по контракту: в JSON — десятичная строка ("42"), внутри ядра — int.
+    if isinstance(value, str):
+        if not _DECIMAL.fullmatch(value):
+            raise ValueError("version must be a decimal string or an int")
+        return int(value)
+    return value
+
+
+LongVersion = Annotated[
+    int,
+    BeforeValidator(_version_to_int),
+    Field(ge=0),
+    PlainSerializer(lambda value: str(value), when_used="json"),
+]
+
+
 class LatLng(BaseModel):
     lat: float = Field(ge=-90.0, le=90.0)
     lon: float = Field(ge=-180.0, le=180.0)
@@ -103,13 +133,15 @@ class Courier(BaseModel):
 class Order(LatLng):
     id: UUID
     client_name: str
+    address: str = Field(min_length=1)
     window_from: AwareDatetime
     window_to: AwareDatetime
-    service_duration_s: int = Field(ge=0)
+    # Встреча нулевой длительности бессмысленна (contract-python.md, п. 2.1).
+    service_duration_s: int = Field(gt=0)
     service_date: date
     # service_order.version: попадёт в assignment.source_order_version при
-    # записи в БД (этап 5); через ядро проходит без изменений.
-    version: int = Field(ge=0)
+    # записи в БД (этап 5); Long — строкой в JSON, int внутри.
+    version: LongVersion
 
     @model_validator(mode="after")
     def _windows_consistent(self) -> "Order":
@@ -125,7 +157,6 @@ class Order(LatLng):
 class SolverConfig(BaseModel):
     speed_kmh: float = Field(gt=0)
     window_mode: WindowMode = WindowMode.SOFT
-    return_to_office: bool = False
 
 
 class Problem(BaseModel):
@@ -136,6 +167,9 @@ class Problem(BaseModel):
     offices: list[Office]
     couriers: list[Courier]
     orders: list[Order]
+    # Пары (order_id, courier_id) после ORDER_REFUSED: этому представителю
+    # эту заявку назначать нельзя (contract-python.md, раздел 8).
+    excluded_pairs: list[tuple[UUID, UUID]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _references_are_valid(self) -> "Problem":
@@ -153,6 +187,11 @@ class Problem(BaseModel):
                 raise ValueError(
                     f"courier {courier.id} references unknown office {courier.office_id}"
                 )
+        order_ids = {order.id for order in self.orders}
+        courier_ids = {courier.id for courier in self.couriers}
+        for order_id, courier_id in self.excluded_pairs:
+            if order_id not in order_ids or courier_id not in courier_ids:
+                raise ValueError("excluded_pairs must reference known order and courier")
         return self
 
 

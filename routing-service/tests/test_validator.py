@@ -110,3 +110,11 @@ def test_only_available_couriers_are_assigned(scenario: Scenario) -> None:
     declined = scenario.c1.model_copy(update={"is_available": False})
     problem2 = scenario.problem.model_copy(update={"couriers": [declined, scenario.c2]})
     assert ViolationCode.UNAVAILABLE_COURIER in codes(validate(scenario, problem=problem2))
+
+
+def test_assignment_respects_excluded_pairs(scenario: Scenario) -> None:
+    # o1 стоит у c1; если c1 отказался от o1 (ORDER_REFUSED), это нарушение.
+    problem2 = scenario.problem.model_copy(
+        update={"excluded_pairs": [(scenario.o1.id, scenario.c1.id)]}
+    )
+    assert ViolationCode.FORBIDDEN_PAIR in codes(validate(scenario, problem=problem2))

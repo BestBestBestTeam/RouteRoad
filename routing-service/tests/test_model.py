@@ -27,6 +27,7 @@ def order_kwargs(**overrides) -> dict:
     base = dict(
         id=uuid4(),
         client_name="client",
+        address="Тестовая ул., 1",
         lat=55.75,
         lon=37.6,
         window_from=ts(9),
@@ -67,9 +68,20 @@ def test_service_date_mismatch_rejected() -> None:
         Order(**order_kwargs(service_date=date(2026, 10, 20)))
 
 
-def test_negative_duration_rejected() -> None:
-    with pytest.raises(ValidationError):
-        Order(**order_kwargs(service_duration_s=-1))
+def test_nonpositive_duration_rejected() -> None:
+    # По контракту service_duration_s > 0.
+    for duration in (-1, 0):
+        with pytest.raises(ValidationError):
+            Order(**order_kwargs(service_duration_s=duration))
+
+
+def test_version_is_long_string_in_json() -> None:
+    order = Order(**order_kwargs(version="42"))
+    assert order.version == 42 and isinstance(order.version, int)
+    assert '"version":"42"' in order.model_dump_json()
+    for garbage in ("abc", "4.5", "", "-1"):
+        with pytest.raises(ValidationError):
+            Order(**order_kwargs(version=garbage))
 
 
 def test_empty_shift_rejected() -> None:
@@ -187,4 +199,3 @@ def test_coordinates_are_bounded() -> None:
 def test_config_defaults() -> None:
     config = SolverConfig(speed_kmh=40)
     assert config.window_mode == WindowMode.SOFT
-    assert config.return_to_office is False

@@ -1,10 +1,11 @@
 """validate_solution сверяет решение с задачей: все числа пересчитываются по
 матрице, на слово не верится ничего.
 
-Проверяем шесть вещей: маршрут в границах смены; прибытие/отъезд/расстояние
+Проверяем семь вещей: маршрут в границах смены; прибытие/отъезд/расстояние
 сходятся с матрицей; window_violation_s посчитан верно; у каждой заявки ровно
 одно назначение; назначение согласовано с маршрутом; назначены только доступные
-курьеры. Остальные проверки убраны намеренно (упрощение этапа 1).
+курьеры; назначение не нарушает excluded_pairs. Остальные проверки убраны
+намеренно (упрощение этапа 1).
 """
 from __future__ import annotations
 
@@ -38,6 +39,7 @@ class ViolationCode(str, Enum):
     DUPLICATE_ASSIGNMENT = "DUPLICATE_ASSIGNMENT"
     ASSIGNMENT_ROUTE_MISMATCH = "ASSIGNMENT_ROUTE_MISMATCH"
     UNAVAILABLE_COURIER = "UNAVAILABLE_COURIER"
+    FORBIDDEN_PAIR = "FORBIDDEN_PAIR"
 
 
 @dataclass(frozen=True)
@@ -55,7 +57,7 @@ def _service_start(stop: RouteStop, order: Order) -> datetime:
 
 
 def _expected_violation_s(start: datetime, order: Order) -> int:
-    # window_to ограничивает начало встречи (решение команды 2026-11-09).
+    # window_to ограничивает начало встречи — по контракту.
     delta = (start - order.window_to).total_seconds()
     return int(delta) if delta > 0 else 0
 
@@ -213,6 +215,14 @@ def _validate_assignments(
             add(
                 ViolationCode.ASSIGNMENT_ROUTE_MISMATCH,
                 "assignment, route membership and route owner must agree",
+                route_id=assignment.route_id,
+                order_id=assignment.order_id,
+            )
+        # Запрет после ORDER_REFUSED: этот курьер больше не берёт эту заявку.
+        if (assignment.order_id, assignment.courier_id) in problem.excluded_pairs:
+            add(
+                ViolationCode.FORBIDDEN_PAIR,
+                "assignment breaks a pair excluded after ORDER_REFUSED",
                 route_id=assignment.route_id,
                 order_id=assignment.order_id,
             )
