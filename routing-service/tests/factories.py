@@ -61,7 +61,7 @@ def make_order(
     lat: float,
     lon: float,
     version: int = 1,
-    address: str = "Синтедная ул., 1",
+    address: str = "Синтетическая ул., 1",
 ) -> Order:
     return Order(
         id=uuid4(),
