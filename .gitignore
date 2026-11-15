@@ -1,0 +1,11 @@
+# Local IDE files
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Local environment files; keep the shared template versioned
+.env
+.env.*
+!.env.example
