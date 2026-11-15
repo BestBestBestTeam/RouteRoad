@@ -1,0 +1,16 @@
+package com.routeroad.execution.domain;
+
+public enum BusinessEventType {
+    DATA_LOADED,
+    PLAN_ACTIVATED,
+    STATUS_CHANGED,
+    ASSIGNMENT_CHANGED,
+    ORDER_RESCHEDULED,
+    COURIER_DELAYED,
+    ORDER_REFUSED,
+    COURIER_REFUSED,
+    ALERT_CREATED,
+    ALERT_ORDER_RESOLVED,
+    ALERT_RESOLVED,
+    SCENARIO_RESET
+}

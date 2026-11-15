@@ -38,7 +38,7 @@ cp .env.example .env
 DB_PORT=5434
 DB_URL=jdbc:postgresql://localhost:5434/routeroad
 DB_USERNAME=routeroad
-DB_PASSWORD=change_me
+DB_PASSWORD=password
 ```
 
 Замените пароль на собственный. Локальный `.env` не хранится в Git.
@@ -164,7 +164,8 @@ Hibernate проверяет соответствие JPA-сущностей с�
 
 ```text
 src/main/resources/db/migration/
-└── V1__create_initial_schema.sql
+├── V1__create_initial_schema.sql
+└── V2__extend_schema_for_final_api_contract.sql
 ```
 
 V1 создаёт семь предметных таблиц:
@@ -180,6 +181,16 @@ V1 создаёт семь предметных таблиц:
 | `assignment` | История назначений заявок | Python |
 
 Также создаётся sequence `planning_run_plan_version_seq`.
+
+### Миграция V2
+
+V2 сверена с окончательным контрактом «RouteRoad: сущности и API для Java» от 09.11.2026 и **успешно применена на локальной PostgreSQL 18.6**. При запуске с `local` Hibernate `ddl-auto=validate` подтвердил соответствие всех 13 JPA-сущностей обновлённой схеме; `GET /api/health` вернул HTTP 200. В истории Flyway две успешные миграции — V1 и V2; повторный запуск не выполняет их заново.
+
+Схема PostgreSQL содержит 13 предметных таблиц. Новые таблицы: `app_user`, `business_event`, `alert`, `alert_order`, `api_command`, `scenario_state`. `assignment` использует PK `(order_id, plan_version)` без отдельного UUID; `courier.availability_date` отсутствует, поскольку MVP содержит один рабочий день сценария. `api_command.error` допускает JSON-объект либо SQL NULL; проверка обязательных полей объекта относится к будущему обработчику команд.
+
+Python должен записывать назначения без `assignment.id` и передавать обязательный `planning_run.metrics` с четырьмя целочисленными метриками. Актуальность маршрутов по-прежнему меняет только Java.
+
+Уникальность `api_command` задаётся по `(actor_id, idempotency_key)` через `NULLS NOT DISTINCT`, включая системного автора и без привязки к поколению сценария. Команды не ссылаются FK на единственную строку `scenario_state`, чтобы сохраняться после смены сценария. Уникальный индекс по константе допускает не более одной строки состояния; её первоначальное создание относится к будущей реализации сценариев.
 
 ### Порядок применения
 
@@ -287,6 +298,30 @@ orders/
 
 Java отвечает за проверку и активацию результатов Python. Python читает общую PostgreSQL и записывает данные планирования согласно согласованному контракту.
 
+### JPA-модель хранения
+
+Реализованы 13 сущностей в `com.routeroad.<модуль>.infrastructure`:
+
+| Модуль | Сущности |
+|---|---|
+| `offices` | `OfficeEntity` |
+| `couriers` | `CourierEntity` |
+| `orders` | `ServiceOrderEntity` |
+| `planning` | `PlanningRunEntity`, `RouteEntity`, `RouteStopEntity`, `AssignmentEntity` |
+| `execution` | `BusinessEventEntity`, `AlertEntity`, `AlertOrderEntity` |
+| `shared` | `AppUserEntity`, `ApiCommandEntity` |
+| `simulation` | `ScenarioStateEntity` |
+
+Перечисления находятся в `domain` соответствующих модулей. Составные ключи — `RouteStopId`, `AssignmentId`, `AlertOrderId`; lowercase-перечисления отображаются явными converters. `AssignmentEntity.planningRun` использует `@MapsId("planVersion")`, остальные межмодульные ссылки остаются скалярными UUID.
+
+JSONB отображается через `@JdbcTypeCode(SqlTypes.JSON)`: метрики — типизированный `PlanningMetrics` с ключами snake_case, объекты событий/запросов/конфигурации — `Map<String, Object>`, произвольный результат и ошибка команды — Jackson `JsonNode`. Метрики и история планирования читаются без изменения; `BusinessEventEntity` также помечена `@Immutable`. Модельное время передаётся явно, без автоматических серверных timestamp.
+
+Hibernate работает с `ddl-auto=validate`: проверяет mapping, а схемой по-прежнему управляет Flyway. UUID передаются явно; `ServiceOrderEntity.version` управляется Hibernate через `@Version`. Записи запусков расчёта, точек маршрутов и назначений помечены `@Immutable`; у маршрута для обновления доступен только `is_active`. Межмодульные внешние ключи отображаются скалярными UUID.
+
+Версии хранятся как `Long`/`bigint`; в JSON HTTP API и обмена Java/Python все версии передаются десятичными строками, что предстоит обеспечить в DTO и JSON payload. Генератор передаёт начальную версию заявки `1`, тогда как обычный `persist` с null-версией Hibernate инициализирует её с `0`; SQL default из V1 также равен `0`. При реализации импорта сценария нужно выбрать явный путь создания: например, INSERT с версией генератора `1` в общей транзакции загрузки и последующее чтение managed-сущности. Дальнейшими UPDATE и увеличением `@Version` управляет Hibernate. Изменять `version` вручную у managed-сущности нельзя; текущий конструктор не реализует импорт сценария.
+
+JPA-репозитории, бизнес-сервисы и CRUD API пока не реализованы.
+
 ## Тестирование
 
 ```bash
@@ -310,14 +345,15 @@ Java отвечает за проверку и активацию результ
 - Базовая вертикальная архитектура.
 - PostgreSQL 18.6 через Docker Compose.
 - JDBC-подключение и настройки Hibernate.
-- Первая применённая миграция Flyway.
-- Семь таблиц и ограничения целостности.
+- Успешно применённые миграции Flyway V1 и V2.
+- 13 предметных таблиц и ограничения целостности.
+- 13 JPA-сущностей, проверенных на PostgreSQL с `ddl-auto=validate`.
 - `GET /api/health`.
 - Базовые проверки конфигурации.
 
 **Пока не реализовано:**
 
-- JPA-сущности и репозитории.
+- JPA-репозитории и бизнес-сервисы.
 - CRUD API для заявок, представителей и офисов.
 - Бизнес-логика статусов.
 - Взаимодействие с Python-оптимизатором.
