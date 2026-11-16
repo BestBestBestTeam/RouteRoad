@@ -1,27 +1,28 @@
 """Greedy-назначение: заявка за заявкой дешёвой вставкой (cheapest insertion).
 
-Маршрут начинается в офисе представителя в max(shift_start, now), возврат не
-нужен. Конец смены жёсткий, нарушение окна мягкое: штраф WINDOW_PENALTY_K
-секунд стоимости за секунду нарушения. Времена и расстояния — только из
-матрицы. Результат проходит validate_solution.
+Общее с ortools (построение остановок, отсечение неназначенных, штраф окна) —
+в app/core/common.py. Результат проходит validate_solution.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from math import ceil
 from time import perf_counter
 from typing import Optional, Sequence
 from uuid import UUID, uuid4
 
+from app.core.common import (
+    WINDOW_PENALTY_K, available as _available,
+    earliest_arrival as _earliest_arrival, infeasible_text as _infeasible_text,
+    no_candidates_text as _no_candidates_text, shift_full_text as _shift_full_text,
+)
+from app.core.common import build_stops as _build_stops
 from app.core.model import (
     Algorithm, Assignment, Courier, Office, Order, Problem, ReasonCode, Route,
-    RouteStop, Solution, StopType,
+    RouteStop, Solution,
 )
-from app.core.time_matrix import SupportsLatLon, TravelTimeMatrix
-
-# Секунда нарушения окна дороже секунды лишнего пути в WINDOW_PENALTY_K раз.
-WINDOW_PENALTY_K = 2.0
+from app.core.time_matrix import TravelTimeMatrix
 
 
 @dataclass(frozen=True)
@@ -34,39 +35,6 @@ class Insert:
     extra_time_s: int
     extra_violation_s: int
     cost_s: float
-
-
-def _build_stops(
-    office: Office,
-    orders: Sequence[Order],
-    matrix: TravelTimeMatrix,
-    start: datetime,
-    shift_end: datetime,
-) -> Optional[list[RouteStop]]:
-    """Маршрут офис -> заявки, весь пересчитан от start.
-    None, если последняя встреча заканчивается после shift_end."""
-    stops = [RouteStop(
-        sequence=1, type=StopType.OFFICE, office_id=office.id,
-        arrival_eta=start, departure_eta=start, distance_from_prev_m=0,
-    )]
-    clock = start
-    previous: SupportsLatLon = office
-    for sequence, order in enumerate(orders, start=2):
-        arrival = clock + timedelta(seconds=matrix.travel_time_s(previous, order))
-        # Раннее прибытие = ожидание до window_from, не нарушение.
-        meeting_start = max(arrival, order.window_from)
-        departure = meeting_start + timedelta(seconds=order.service_duration_s)
-        if departure > shift_end:
-            return None
-        stops.append(RouteStop(
-            sequence=sequence, type=StopType.ORDER, order_id=order.id,
-            arrival_eta=arrival, departure_eta=departure,
-            distance_from_prev_m=matrix.distance_m(previous, order),
-            window_violation_s=int(max((meeting_start - order.window_to).total_seconds(), 0)),
-        ))
-        clock = departure
-        previous = order
-    return stops
 
 
 def _totals(
@@ -97,8 +65,9 @@ def try_insert_order(
     Перебираем все позиции; каждая пересчитывает весь маршрут, потому что
     вставка сдвигает последующие точки. Варианты, где встреча заканчивается
     после shift_end, отбрасываем — это жёстко. Стоимость = прирост
-    длительности + штраф новых нарушений окон. При равенстве берётся первая
-    позиция (детерминированность). None, если не влезает никуда.
+    длительности + штраф новых нарушений окон (WINDOW_PENALTY_K). При
+    равенстве берётся первая позиция (детерминированность).
+    None, если не влезает никуда.
     """
     start = max(courier.shift_start, now)
     base = _totals(office, current, matrix, start, courier.shift_end)
@@ -120,41 +89,6 @@ def try_insert_order(
                 extra_violation_s=extra_violation, cost_s=cost,
             )
     return best
-
-
-def _available(courier: Courier, now: datetime) -> bool:
-    return courier.is_available and courier.shift_end > now
-
-
-def _earliest_arrival(
-    order: Order,
-    couriers: Sequence[Courier],
-    offices: dict[UUID, Office],
-    matrix: TravelTimeMatrix,
-    now: datetime,
-) -> Optional[datetime]:
-    """Когда приедет ближайший из представителей: старт из своего офиса в
-    max(shift_start, now), дорога только по матрице. None, если кандидатов нет."""
-    best: Optional[datetime] = None
-    for courier in couriers:
-        arrival = max(courier.shift_start, now) + timedelta(
-            seconds=matrix.travel_time_s(offices[courier.office_id], order)
-        )
-        if best is None or arrival < best:
-            best = arrival
-    return best
-
-
-def _infeasible_text(order: Order, earliest: Optional[datetime]) -> str:
-    if earliest is None:
-        return (
-            f"{order.client_name} ({order.address}): никто из доступных "
-            f"представителей не доедет до {order.window_to:%H:%M}"
-        )
-    return (
-        f"{order.client_name} ({order.address}): ближайший представитель "
-        f"приедет к {earliest:%H:%M}, а окно закрывается в {order.window_to:%H:%M}"
-    )
 
 
 def _assigned_text(
@@ -200,8 +134,7 @@ class GreedySolver:
             if not candidates:
                 # Дело не в окне — назначать просто некому.
                 unassigned[order.id] = (
-                    ReasonCode.NO_CAPACITY,
-                    f"{order.client_name} ({order.address}): нет доступных представителей",
+                    ReasonCode.NO_CAPACITY, _no_candidates_text(order),
                 )
                 continue
             earliest = _earliest_arrival(order, candidates, offices, matrix, now)
@@ -220,10 +153,7 @@ class GreedySolver:
                 if insert is not None and (best is None or insert.cost_s < best[0].cost_s):
                     best = (insert, courier)
             if best is None:
-                unassigned[order.id] = (
-                    ReasonCode.NO_CAPACITY,
-                    f"{order.client_name} ({order.address}): не помещается ни в одну смену",
-                )
+                unassigned[order.id] = (ReasonCode.NO_CAPACITY, _shift_full_text(order))
                 continue
             insert, courier = best
             was_empty = courier.id not in sequences
