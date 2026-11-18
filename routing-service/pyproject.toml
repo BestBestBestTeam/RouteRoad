@@ -25,6 +25,11 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "slow: долгие прогоны (полная матрица случайных сценариев)",
+]
+# Обычный pytest -q — только быстрые тесты; полное: pytest -m slow.
+addopts = "-m 'not slow'"
 
 [tool.mypy]
 python_version = "3.11"
