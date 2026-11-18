@@ -1,0 +1,37 @@
+[project]
+name = "routing-service"
+version = "0.1.0"
+description = "RouteRoad: assignment and routing service (Python side, synthetic data)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    # used from stage 3 (VRPTW), installed now so the environment is ready
+    "ortools>=9.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "slow: долгие прогоны (полная матрица случайных сценариев)",
+]
+# Обычный pytest -q — только быстрые тесты; полное: pytest -m slow.
+addopts = "-m 'not slow'"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+no_implicit_optional = true
