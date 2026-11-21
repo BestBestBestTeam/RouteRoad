@@ -20,6 +20,27 @@ public interface RouteRepository extends Repository<RouteEntity, UUID> {
 
     List<RouteEntity> findByPlanningRun_PlanVersion(Long planVersion);
 
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM route r
+                WHERE r.plan_date = :date AND r.is_active AND EXISTS (
+                    SELECT 1 FROM business_event e
+                    WHERE e.type = 'PLAN_ACTIVATED' AND e.service_date = :date
+                        AND e.payload ->> 'plan_version' = CAST(r.plan_version AS text)
+                )
+            )
+            """, nativeQuery = true)
+    boolean existsConfirmedActiveByPlanDate(@Param("date") LocalDate date);
+
+    @Query(value = """
+            SELECT r.* FROM route r
+            WHERE r.courier_id = :courierId AND r.plan_date = :date AND r.is_active
+                AND EXISTS (SELECT 1 FROM business_event e
+                    WHERE e.type = 'PLAN_ACTIVATED' AND e.service_date = :date
+                        AND e.payload ->> 'plan_version' = CAST(r.plan_version AS text))
+            """, nativeQuery = true)
+    Optional<RouteEntity> findConfirmedActive(@Param("courierId") UUID courierId, @Param("date") LocalDate date);
+
     /** Requires a caller transaction; flushes and clears its persistence context. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update RouteEntity r set r.active = :active where r.id = :id")

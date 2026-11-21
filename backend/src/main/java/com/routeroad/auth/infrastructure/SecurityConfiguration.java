@@ -30,7 +30,9 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(config -> config
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/health", "/api/auth/login").permitAll()
-                        .requestMatchers("/api/auth/register").hasRole("DISPATCHER")
+                        .requestMatchers("/api/auth/register", "/api/workday", "/api/orders", "/api/couriers").hasRole("DISPATCHER")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/orders/*", "/api/couriers/*/schedule")
+                            .hasAnyRole("DISPATCHER", "REPRESENTATIVE")
                         .anyRequest().authenticated())
                 .exceptionHandling(config -> config
                         .authenticationEntryPoint((request, response, exception) -> {

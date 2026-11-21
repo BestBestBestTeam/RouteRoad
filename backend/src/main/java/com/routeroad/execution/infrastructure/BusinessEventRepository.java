@@ -10,6 +10,9 @@ import java.util.UUID;
 
 public interface BusinessEventRepository extends Repository<BusinessEventEntity, UUID> {
 
+    boolean existsByTypeAndCourierIdAndServiceDate(com.routeroad.execution.domain.BusinessEventType type,
+                                                  UUID courierId, LocalDate serviceDate);
+
     <S extends BusinessEventEntity> S save(S entity);
 
     Optional<BusinessEventEntity> findById(UUID id);

@@ -34,6 +34,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 @AutoConfigureMockMvc
 class AuthenticationHttpTests {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.OrderAlerts orderAlerts;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.orders.application.OrderReader orderReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayReader workdayReader;
+
     private static final UUID DISPATCHER = UUID.randomUUID();
     private static final UUID COURIER = UUID.randomUUID();
     private static final UUID FREE_COURIER = UUID.randomUUID();
