@@ -69,6 +69,10 @@ public class AppUserEntity {
         return passwordHash;
     }
 
+    public void rename(String name) {
+        this.name = name;
+    }
+
     public String getName() {
         return name;
     }
