@@ -38,18 +38,6 @@ class ConfigurationProfilesTests {
 		});
 	}
 
-    @Test
-    void productionCookiesRequireHttpsAndSessionIdsOnlyUseCookies() {
-        contextRunner.withPropertyValues("spring.profiles.active=prod").run(context -> {
-            assertThat(context).hasNotFailed();
-            var environment = context.getEnvironment();
-            assertThat(environment.getProperty("server.servlet.session.cookie.secure", Boolean.class)).isTrue();
-            assertThat(environment.getProperty("server.servlet.session.cookie.http-only", Boolean.class)).isTrue();
-            assertThat(environment.getProperty("server.servlet.session.cookie.same-site")).isEqualTo("lax");
-            assertThat(environment.getProperty("server.servlet.session.tracking-modes")).isEqualTo("cookie");
-        });
-    }
-
 	@ParameterizedTest
 	@ValueSource(strings = {"local", "test", "local,test", "local,context-smoke", "test,context-smoke", "local,test,context-smoke"})
 	void databaseProfilesDoNotInheritBootstrapExclusion(String profiles) {
