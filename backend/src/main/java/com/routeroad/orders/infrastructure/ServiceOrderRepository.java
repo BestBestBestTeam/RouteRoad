@@ -33,6 +33,9 @@ public interface ServiceOrderRepository extends JpaRepository<ServiceOrderEntity
     long countOrderList(@Param("date") LocalDate date, @Param("search") String search,
             @Param("status") String status, @Param("courierId") UUID courierId, @Param("assigned") Boolean assigned);
 
+    @Query(value = OrderReadSql.DAY, nativeQuery = true)
+    java.util.List<OrderListRow> findDay(@Param("date") LocalDate date);
+
     @Query("select o.serviceDate from ServiceOrderEntity o where o.id = :id")
     Optional<LocalDate> findCurrentServiceDate(@Param("id") UUID id);
 
@@ -46,7 +49,8 @@ public interface ServiceOrderRepository extends JpaRepository<ServiceOrderEntity
     @Query(value = OrderReadSql.SCHEDULE, nativeQuery = true)
     java.util.List<ScheduleOrderRow> findSchedule(@Param("courierId") UUID courierId, @Param("date") LocalDate date);
 
-    interface RefusalState {
+    interface ActionState {
+        boolean getAwaitingDecision();
         boolean getOrderRefused();
         boolean getDayRefused();
     }
@@ -54,8 +58,10 @@ public interface ServiceOrderRepository extends JpaRepository<ServiceOrderEntity
             SELECT EXISTS (SELECT 1 FROM business_event e WHERE e.type = 'ORDER_REFUSED'
                     AND e.order_id = :orderId AND e.courier_id = :courierId) AS "orderRefused",
                 EXISTS (SELECT 1 FROM business_event e WHERE e.type = 'COURIER_REFUSED'
-                    AND e.courier_id = :courierId AND e.service_date = :date) AS "dayRefused"
+                    AND e.courier_id = :courierId AND e.service_date = :date) AS "dayRefused",
+            """ + com.routeroad.execution.infrastructure.ReassignmentReadSql.AWAITING_DECISION + """
+            AS "awaitingDecision"
             """, nativeQuery = true)
-    RefusalState findRefusals(@Param("orderId") UUID orderId, @Param("courierId") UUID courierId,
+    ActionState findActionContext(@Param("orderId") UUID orderId, @Param("courierId") UUID courierId,
                               @Param("date") LocalDate date);
 }

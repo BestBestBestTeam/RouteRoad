@@ -33,4 +33,6 @@ public interface OrderListRow {
     String getActorName();
     String getActorRole();
     boolean getCanReassign();
+    Instant getReassignDeadline();
+    boolean getAwaitingDecision();
 }

@@ -1,5 +1,7 @@
 package com.routeroad.planning.infrastructure;
 
+import com.routeroad.execution.infrastructure.ReassignmentReadSql;
+
 public final class ConfirmedOrderSnapshotSql {
     private ConfirmedOrderSnapshotSql() {}
     private static final String DAY_SELECT = """
@@ -22,10 +24,9 @@ public final class ConfirmedOrderSnapshotSql {
                     d.decided_by, d.created_at AS decision_created_at, d.actor_id,
                     c.name AS courier_name, u.name AS actor_name, u.role AS actor_role,
                     (o.service_date = :date AND d.courier_id IS NOT NULL) AS is_assigned,
-                    (o.service_date = :date AND o.day_status IN ('NEW','ASSIGNED','UNASSIGNED','EN_ROUTE','ARRIVED')
-                        AND EXISTS (SELECT 1 FROM alert_order ao JOIN alert al ON al.id = ao.alert_id
-                            WHERE ao.order_id = o.id AND ao.status = 'pending'
-                                AND al.status = 'open' AND al.service_date = :date)) AS can_reassign
+                    (""" + ReassignmentReadSql.ELIGIBLE_ORDER + """
+                        AND pending.deadline IS NOT NULL) AS can_reassign,
+                    pending.deadline AS reassign_deadline
                 FROM day_orders o
                 LEFT JOIN LATERAL (
                     SELECT a.*, e.actor_id
@@ -38,6 +39,8 @@ public final class ConfirmedOrderSnapshotSql {
                     ORDER BY e.created_at DESC, e.id DESC
                     LIMIT 1
                 ) d ON true
+                LEFT JOIN LATERAL (""" + ReassignmentReadSql.PENDING_DEADLINE + """
+                ) pending ON true
                 LEFT JOIN courier c ON c.id = d.courier_id
                 LEFT JOIN app_user u ON u.id = d.actor_id
             )

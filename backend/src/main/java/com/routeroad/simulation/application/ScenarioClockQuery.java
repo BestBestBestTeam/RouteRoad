@@ -7,6 +7,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Map;
 
 /** Shared read-only date/clock calculation; callers define the read transaction. */
 @Component
@@ -17,7 +18,7 @@ public class ScenarioClockQuery {
         this.reader = reader;
         this.realClock = realClock;
     }
-    public record Context(LocalDate date, LocalDate scenarioDate, Clock clock) {}
+    public record Context(LocalDate date, LocalDate scenarioDate, Clock clock, Map<String, Object> config) {}
     public Optional<Context> get(LocalDate requestedDate) {
         return reader.findCurrent().map(state -> {
             var elapsed = Duration.between(state.realAnchorAt(), realClock.instant());
@@ -26,7 +27,7 @@ public class ScenarioClockQuery {
             var now = state.modelAnchorAt().plusSeconds(scaled.toBigInteger().longValueExact())
                     .plusNanos(scaled.remainder(BigDecimal.ONE).movePointRight(9).longValueExact());
             return new Context(requestedDate == null ? state.serviceDate() : requestedDate, state.serviceDate(),
-                    new Clock(state.id(), now, state.speed(), state.revision()));
+                    new Clock(state.id(), now, state.speed(), state.revision()), state.config());
         });
     }
 }

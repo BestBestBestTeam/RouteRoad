@@ -19,8 +19,7 @@ public class JpaCourierReader implements CourierReader {
         var rows = couriers.findCourierList(filter.date(), filter.search(), filter.available(),
                 filter.hasOpenAlerts(), filter.hasWorkload(), pageSize, offset);
         var views = rows.stream().map(row -> new CourierView(row.getId(), row.getName(), row.getOfficeId(),
-                row.getShiftStart(), row.getShiftEnd(), row.getPositionAt() == null ? null
-                    : new Position(row.getPositionLat(), row.getPositionLon(), row.getPositionAt()),
+                row.getShiftStart(), row.getShiftEnd(), Position.fromNullable(row.getPositionLat(), row.getPositionLon(), row.getPositionAt()),
                 row.getAvailable(), Math.toIntExact(row.getTotalOrders()), Math.toIntExact(row.getCompletedOrders()),
                 
                 Math.toIntExact(row.getOpenAlertCount()), List.<String>of())).toList();

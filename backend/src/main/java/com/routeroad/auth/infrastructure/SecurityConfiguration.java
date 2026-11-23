@@ -30,7 +30,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(config -> config
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/health", "/api/auth/login").permitAll()
-                        .requestMatchers("/api/auth/register", "/api/workday", "/api/orders", "/api/couriers").hasRole("DISPATCHER")
+                        .requestMatchers("/api/auth/register", "/api/workday", "/api/workday/map", "/api/alerts", "/api/history", "/api/orders", "/api/couriers").hasRole("DISPATCHER")
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/orders/*", "/api/couriers/*/schedule")
                             .hasAnyRole("DISPATCHER", "REPRESENTATIVE")
                         .anyRequest().authenticated())
@@ -46,7 +46,14 @@ public class SecurityConfiguration {
                                         ? "INVALID_CSRF" : "FORBIDDEN", "Доступ запрещён")))
                 .logout(config -> config.logoutUrl("/api/auth/logout")
                         .deleteCookies("JSESSIONID")
-                        .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)))
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            if (authentication != null && authentication.isAuthenticated()
+                                    && !(authentication instanceof org.springframework.security.authentication.AnonymousAuthenticationToken)) {
+                                response.setStatus(204);
+                            } else {
+                                errors.write(response, 401, "UNAUTHENTICATED", "Требуется вход в систему");
+                            }
+                        }))
                 .addFilterBefore(new LoginOriginFilter(origins, errors), CsrfFilter.class);
         return http.build();
     }

@@ -10,5 +10,9 @@ public interface WorkdayReader {
 
     record Counts(long ordersTotal, long ordersAssigned, long ordersCompleted,
                   long couriersTotal, long openAlerts, boolean hasRoutes) {}
-    record Office(UUID id, String name, String address, double lat, double lon) {}
+    record Office(UUID id, String name, String address, double lat, double lon) {
+        public com.routeroad.offices.api.OfficeView view() {
+            return new com.routeroad.offices.api.OfficeView(id, name, address, lat, lon);
+        }
+    }
 }

@@ -33,6 +33,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 class CouriersHttpTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -65,10 +74,10 @@ class CouriersHttpTests {
                 "representative", hash, "Representative", AppUserRole.REPRESENTATIVE, UUID.randomUUID())));
         when(realClock.instant()).thenReturn(Instant.parse("2026-11-15T07:00:10Z"));
         when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(SCENARIO, DATE,
-                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L)));
+                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L, java.util.Map.of())));
         when(reader.count(any())).thenReturn(new WorkdayReader.Counts(10, 7, 2, 5, 3, true));
         when(reader.findOffices()).thenReturn(List.of(new WorkdayReader.Office(UUID.randomUUID(), "Office", "Address", 55, 82)));
-        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean()))
+        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean(), any()))
                 .thenReturn(new com.routeroad.orders.application.OrderReader.Result(List.of(), 0));
         when(courierReader.find(any(),anyInt(),anyLong()))
                 .thenReturn(new com.routeroad.couriers.application.CourierReader.Result(List.of(sample(true)),1));

@@ -33,6 +33,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 class WorkdayHttpTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -63,7 +72,7 @@ class WorkdayHttpTests {
                 "representative", hash, "Representative", AppUserRole.REPRESENTATIVE, UUID.randomUUID())));
         when(realClock.instant()).thenReturn(Instant.parse("2026-11-15T07:00:10Z"));
         when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(SCENARIO, DATE,
-                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L)));
+                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L, java.util.Map.of())));
         when(reader.count(any())).thenReturn(new WorkdayReader.Counts(10, 7, 2, 5, 3, true));
         when(reader.findOffices()).thenReturn(List.of(new WorkdayReader.Office(UUID.randomUUID(), "Office", "Address", 55, 82)));
     }
@@ -87,12 +96,32 @@ class WorkdayHttpTests {
                 .andExpect(jsonPath("$.clock.speed").value(0.5)).andExpect(jsonPath("$.clock.revision").value("9007199254740993"))
                 .andExpect(jsonPath("$.offices[0].address").value("Address")).andReturn();
         var body = json.readTree(result.getResponse().getContentAsString());
-        assertThat(body.size()).isEqualTo(5);
+        assertThat(body.properties().stream().map(Map.Entry::getKey).toList()).containsExactlyInAnyOrder(
+                "date", "counts", "has_routes", "algorithm", "offices", "clock");
+        assertThat(body.get("algorithm").asString()).isEqualTo("greedy");
         assertThat(body.get("counts").size()).isEqualTo(5);
         assertThat(body.get("clock").size()).isEqualTo(4);
         assertThat(body.get("offices").get(0).size()).isEqualTo(5);
         assertThat(body.get("clock").get("revision").isString()).isTrue();
         verify(reader).count(DATE);
+    }
+    private void algorithm(Object value) {
+        var current = scenarioReader.findCurrent().orElseThrow();
+        when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(
+                current.id(), current.serviceDate(), current.modelAnchorAt(), current.realAnchorAt(), current.speed(),
+                current.revision(), java.util.Collections.singletonMap("algorithm", value))));
+    }
+    @Test void ortoolsIsReturnedFromScenarioConfiguration() throws Exception {
+        algorithm("ortools");
+        mvc.perform(get("/api/workday").session(login("dispatcher"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.algorithm").value("ortools"));
+    }
+    @Test void invalidServerAlgorithmIs500WithoutLeakingConfiguration() throws Exception {
+        algorithm("private-invalid-setting");
+        var response = mvc.perform(get("/api/workday").session(login("dispatcher"))).andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR")).andReturn();
+        assertThat(response.getResponse().getContentAsString()).doesNotContain("private-invalid-setting", "algorithm");
+        verifyNoInteractions(reader);
     }
     @Test void optionalDateIsPassedToTheApplication() throws Exception {
         mvc.perform(get("/api/workday").param("date", "2026-11-16").session(login("dispatcher")))

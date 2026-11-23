@@ -35,7 +35,7 @@ public class OrderQueryService {
         var context = scenario.get(date).orElseThrow(com.routeroad.simulation.application.ScenarioNotInitializedException::new);
         String pattern = com.routeroad.shared.application.TextSearch.contains(search);
         var result = reader.find(new OrderReader.Filter(context.date(), pattern, status, courierId, assigned),
-                pageSize, ((long) page - 1) * pageSize, context.date().equals(context.scenarioDate()));
+                pageSize, ((long) page - 1) * pageSize, context.date().equals(context.scenarioDate()), context.clock().now());
         return new Page<>(result.items(), Math.toIntExact(result.total()), page, pageSize, context.clock());
     }
 
@@ -47,22 +47,22 @@ public class OrderQueryService {
         boolean dispatcher = viewer.role() == AppUserRole.DISPATCHER;
         OrderView order;
         if (dispatcher) {
-            order = reader.findOne(id, context.date(), context.date().equals(context.scenarioDate()))
+            order = reader.findOne(id, context.date(), context.date().equals(context.scenarioDate()), context.clock().now())
                     .orElseThrow(OrderNotFoundException::new);
         } else {
             
-            order = reader.findOne(id, currentDate, false).orElseThrow(OrderNotFoundException::new);
+            order = reader.findOne(id, currentDate, false, context.clock().now()).orElseThrow(OrderNotFoundException::new);
             if (viewer.courierId() == null || order.assignment() == null
                     || !viewer.courierId().equals(order.assignment().courierId())
                     || !context.date().equals(currentDate)) {
                 throw new AccessDeniedException("Access denied");
             }
-            var refusals = reader.refusals(id, viewer.courierId(), currentDate);
+            var restrictions = reader.actionContext(id, viewer.courierId(), currentDate);
             order = order.withActions(RepresentativeOrderActions.forOrder(order.status(),
-                    currentDate.equals(context.scenarioDate()), refusals.orderRefused(), refusals.dayRefused()));
+                    currentDate.equals(context.scenarioDate()), restrictions.orderRefused(), restrictions.dayRefused(), restrictions.awaitingDecision()));
         }
         
         return new OrderDetailView(order, alerts.find(id, context.date(), dispatcher ? null : viewer.courierId(),
-                dispatcher && context.date().equals(context.scenarioDate())), context.clock());
+                dispatcher && context.date().equals(context.scenarioDate()), context.clock().now()), context.clock());
     }
 }

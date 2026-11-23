@@ -118,7 +118,7 @@ class CourierSchedulePostgresTests {
             assertThat(order.get("assignment").get("plan_version").isString()).isTrue();
             assertThat(order.get("assignment").get("source_order_version").isString()).isTrue();
             assertThat(order.get("district").isNull()).isTrue();
-            assertThat(order.get("available_actions").isEmpty()).isTrue();
+            for (var action : order.get("available_actions")) assertThat(action.asString()).isEqualTo("REASSIGN");
         }
         assertThat(root.get("orders").get(1).get("version").asString()).isEqualTo("9007199254740993");
         assertThat(root.get("orders").get(1).get("assignment").get("actor").get("role").asString()).isEqualTo("dispatcher");
@@ -140,7 +140,7 @@ class CourierSchedulePostgresTests {
         var result = schedule(2);
         assertThat(result.route().planVersion()).isEqualTo(PLAN+1);
         assertThat(result.route().stops()).hasSize(1).allSatisfy(s -> assertThat(s.type()).isEqualTo(RouteStopType.OFFICE));
-        assertThat(result.route().geometry().coordinates()).containsExactly(List.of(83.0,56.0));
+        assertThat(result.route().geometry()).isNull();
         assertThat(result.orders()).isEmpty();
         assertThat(schedule(1).route().planVersion()).isEqualTo(PLAN);
     }
@@ -154,7 +154,8 @@ class CourierSchedulePostgresTests {
     }
     @Test void emptyStopsDoNotProduceInventedGeometry() {
         jdbc.update("delete from route_stop where route_id=?", id(0x500,2));
-        assertThat(schedule(2).route().geometry().coordinates()).isEmpty();
+        assertThat(schedule(2).route().geometry()).isNull();
+        assertThat(schedule(2).route().stops()).isEmpty();
     }
     @Test void pythonPlanIsHiddenEvenIfItsActiveFlagWasIncorrectlySet() {
         assertThat(schedule(1).route().planVersion()).isEqualTo(PLAN);
@@ -238,7 +239,7 @@ class CourierSchedulePostgresTests {
             var courierId = id(0x200,n);
             var schedule = schedule(n);
             var list = orders.get(DATE,null,null,id(0x200,n),true,1,100).items();
-            assertThat(schedule.orders()).isEqualTo(list.stream().map(o -> o.withActions(List.of())).toList());
+            assertThat(schedule.orders()).isEqualTo(list);
             var courier = couriers.get(DATE,null,null,null,null,1,100).items().stream()
                     .filter(c -> c.id().equals(courierId)).findFirst().orElseThrow();
             assertThat(schedule.courier()).isEqualTo(courier);

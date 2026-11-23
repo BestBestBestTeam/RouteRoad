@@ -46,20 +46,20 @@ class CourierScheduleRepositoryPostgresTests {
     @Test void scopedOrdersAgreeWithSharedListIncludingPartialPlansAndExplicitUnassignment() {
         for (int n = 1; n <= 5; n++) {
             var courier = id(0x200, n);
-            assertThat(orders.findSchedule(courier, DATE).stream().map(OrderReader.ScheduledOrder::order).toList())
-                    .isEqualTo(orders.find(new OrderReader.Filter(DATE, null, null, courier, true), 100, 0, false).items());
+            assertThat(orders.findSchedule(courier, DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z")).stream().map(OrderReader.ScheduledOrder::order).toList())
+                    .isEqualTo(orders.find(new OrderReader.Filter(DATE, null, null, courier, true), 100, 0, false, java.time.Instant.parse("2099-11-09T09:00:10Z")).items());
         }
-        assertThat(orders.findSchedule(id(0x200, 1), DATE)).extracting(o -> o.order().id())
+        assertThat(orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).extracting(o -> o.order().id())
                 .containsExactlyInAnyOrder(id(0x300, 1), id(0x300, 9), id(0x300, 10));
-        assertThat(orders.findSchedule(id(0x200, 1), DATE.plusDays(1))).isEmpty();
+        assertThat(orders.findSchedule(id(0x200, 1), DATE.plusDays(1), false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).isEmpty();
     }
     @Test void refusalsAreReadWithOrdersInOneQuery() {
-        var initial = orders.findSchedule(id(0x200, 1), DATE);
+        var initial = orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"));
         assertThat(initial).filteredOn(o -> o.order().id().equals(id(0x300, 1)))
-                .allSatisfy(o -> assertThat(o.refusals()).isEqualTo(new OrderReader.Refusals(true, false)));
+                .allSatisfy(o -> assertThat(o.context()).isEqualTo(new OrderReader.ActionContext(true, false, true)));
         jdbc.update("insert into business_event(id,type,service_date,courier_id,occurred_at,created_at,reason,payload) values(?,'COURIER_REFUSED',?,?,'2099-11-09T10:00:00Z','2099-11-09T10:00:00Z','Refused','{}')",
                 id(0x700, 30), DATE, id(0x200, 1));
-        assertThat(orders.findSchedule(id(0x200, 1), DATE)).allSatisfy(o -> assertThat(o.refusals().dayRefused()).isTrue());
+        assertThat(orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).allSatisfy(o -> assertThat(o.context().dayRefused()).isTrue());
     }
     @Test void activeRoutesCanHaveDifferentVersionsAndOfficeOnlyStops() {
         assertThat(routes.findConfirmedActive(id(0x200, 1), DATE).orElseThrow().getPlanningRun().getPlanVersion()).isEqualTo(PLAN);
@@ -71,7 +71,7 @@ class CourierScheduleRepositoryPostgresTests {
         jdbc.update("update route set is_active=false where id=?", id(0x500, 1));
         jdbc.update("update route set is_active=true where id=?", id(0x500, 3));
         assertThat(routes.findConfirmedActive(id(0x200, 1), DATE)).isEmpty();
-        assertThat(orders.findSchedule(id(0x200, 1), DATE).stream().map(OrderReader.ScheduledOrder::order))
+        assertThat(orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z")).stream().map(OrderReader.ScheduledOrder::order))
                 .extracting(o -> o.assignment().planVersion()).containsOnly(PLAN);
     }
     @Test void stopOrderAndCompositeKeysArePreserved() {
@@ -85,19 +85,19 @@ class CourierScheduleRepositoryPostgresTests {
                 id(0x300, 1), PLAN + 1, id(0x200, 2), id(0x500, 2));
         jdbc.update("update business_event set payload=jsonb_set(payload,'{order_ids}',(payload->'order_ids') || to_jsonb(cast(? as text))) where id=?",
                 id(0x300, 1).toString(), id(0x700, 2));
-        assertThat(orders.findSchedule(id(0x200, 1), DATE)).noneSatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
-        assertThat(orders.findSchedule(id(0x200, 2), DATE)).anySatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
+        assertThat(orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).noneSatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
+        assertThat(orders.findSchedule(id(0x200, 2), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).anySatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
     }
     @Test void activationCreatedAtWinsOverPlanVersionAndModelTime() {
         jdbc.update("insert into assignment(order_id,plan_version,courier_id,route_id,source_order_version,reason_code,reason_text,decided_by,created_at) values(?,?,?,?,2,'OPTIMIZED','Transferred','SYSTEM','2099-11-09T12:00:00Z')",
                 id(0x300, 1), PLAN + 1, id(0x200, 2), id(0x500, 2));
         jdbc.update("update business_event set created_at='2099-11-09T08:59:00Z',payload=jsonb_set(payload,'{order_ids}',(payload->'order_ids') || to_jsonb(cast(? as text))) where id=?",
                 id(0x300, 1).toString(), id(0x700, 2));
-        assertThat(orders.findSchedule(id(0x200, 1), DATE)).anySatisfy(o -> {
+        assertThat(orders.findSchedule(id(0x200, 1), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).anySatisfy(o -> {
             assertThat(o.order().id()).isEqualTo(id(0x300, 1));
             assertThat(o.order().assignment().planVersion()).isEqualTo(PLAN);
         });
-        assertThat(orders.findSchedule(id(0x200, 2), DATE)).noneSatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
+        assertThat(orders.findSchedule(id(0x200, 2), DATE, false, java.time.Instant.parse("2099-11-09T09:00:10Z"))).noneSatisfy(o -> assertThat(o.order().id()).isEqualTo(id(0x300, 1)));
     }
 
 }

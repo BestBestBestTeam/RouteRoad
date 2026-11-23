@@ -2,6 +2,7 @@ package com.routeroad.planning.api;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -14,6 +15,6 @@ public record RouteView(UUID id, @JsonProperty("courier_id") UUID courierId,
         @JsonProperty("total_distance_m") int totalDistanceM,
         @JsonProperty("violated_windows") int violatedWindows,
         @JsonProperty("created_at") Instant createdAt, List<RouteStop> stops,
-        Geometry geometry, @JsonProperty("geometry_kind") String geometryKind) {
+        @Nullable Geometry geometry, @JsonProperty("geometry_kind") String geometryKind) {
     public record Geometry(String type, List<List<Double>> coordinates) {}
 }

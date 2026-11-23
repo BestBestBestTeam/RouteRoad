@@ -7,5 +7,5 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record WorkdayView(LocalDate date, WorkdayCounts counts,
-                          @JsonProperty("has_routes") boolean hasRoutes,
+                          @JsonProperty("has_routes") boolean hasRoutes, String algorithm,
                           List<OfficeView> offices, Clock clock) {}

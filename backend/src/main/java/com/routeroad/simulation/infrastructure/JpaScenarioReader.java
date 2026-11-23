@@ -11,6 +11,6 @@ public class JpaScenarioReader implements ScenarioReader {
     @Override public Optional<Scenario> findCurrent() {
         return scenarios.findAll().stream().findFirst().map(state -> new Scenario(state.getScenarioId(),
                 state.getServiceDate(), state.getModelAnchorAt(), state.getRealAnchorAt(),
-                state.getSpeed(), state.getRevision()));
+                state.getSpeed(), state.getRevision(), state.getConfig()));
     }
 }

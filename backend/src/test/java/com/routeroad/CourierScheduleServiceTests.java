@@ -34,8 +34,8 @@ class CourierScheduleServiceTests {
         viewer(AppUserRole.DISPATCHER, null);
         when(reader.findCourier(COURIER)).thenReturn(Optional.of(courier));
         when(scenario.findCurrent()).thenReturn(Optional.of(new ScenarioReader.Scenario(UUID.randomUUID(), DATE,
-                NOW, NOW, 1, 9_007_199_254_740_993L)));
-        when(orders.findSchedule(eq(COURIER), any())).thenReturn(List.of());
+                NOW, NOW, 1, 9_007_199_254_740_993L, java.util.Map.of())));
+        when(orders.findSchedule(eq(COURIER), any(), anyBoolean(), any())).thenReturn(List.of());
         when(reader.details(eq(courier), any(), anyList())).thenReturn(new CourierScheduleReader.Details(null, List.of(), 0, false));
     }
     private void viewer(AppUserRole role, UUID courierId) {
@@ -44,7 +44,7 @@ class CourierScheduleServiceTests {
     private OrderReader.ScheduledOrder order(ServiceOrderStatus status, boolean refused, boolean dayRefused) {
         return new OrderReader.ScheduledOrder(new OrderView(UUID.randomUUID(), "1", "Client", "Address", null, "Card",
                 55, 82, NOW, NOW.plusSeconds(3600), 600, status, DATE, 1L, status, null, List.of("REASSIGN")),
-                new OrderReader.Refusals(refused, dayRefused));
+                new OrderReader.ActionContext(refused, dayRefused, false));
     }
     @Test void foreignCourierIsDeniedBeforeReadingAnyScheduleOrScenarioData() {
         viewer(AppUserRole.REPRESENTATIVE, UUID.randomUUID());
@@ -75,26 +75,26 @@ class CourierScheduleServiceTests {
         assertThat(result.orders()).isEmpty();
         assertThat(result.clock().now()).isEqualTo(NOW);
         assertThat(result.courier().position()).isNull();
-        verify(orders).findSchedule(COURIER, DATE);
+        verify(orders).findSchedule(eq(COURIER), eq(DATE), anyBoolean(), any());
     }
     @Test void explicitDateDisablesRepresentativeActionsWithoutChangingScenarioClock() {
         viewer(AppUserRole.REPRESENTATIVE, COURIER);
-        when(orders.findSchedule(COURIER, DATE.plusDays(1))).thenReturn(List.of(order(ServiceOrderStatus.ASSIGNED, false, false)));
+        when(orders.findSchedule(eq(COURIER), eq(DATE.plusDays(1)), anyBoolean(), any())).thenReturn(List.of(order(ServiceOrderStatus.ASSIGNED, false, false)));
         var result = service.get(COURIER, DATE.plusDays(1), "session");
         assertThat(result.date()).isEqualTo(DATE.plusDays(1));
         assertThat(result.clock().now()).isEqualTo(NOW);
         assertThat(result.orders().getFirst().availableActions()).isEmpty();
         assertThat(result.courier().availableActions()).isEmpty();
     }
-    @Test void dispatcherGetsNoOrderOrCourierActions() {
-        when(orders.findSchedule(COURIER, DATE)).thenReturn(List.of(order(ServiceOrderStatus.ASSIGNED, false, false)));
+    @Test void dispatcherKeepsReassignmentFromReaderWithoutRepresentativeActions() {
+        when(orders.findSchedule(eq(COURIER), eq(DATE), anyBoolean(), any())).thenReturn(List.of(order(ServiceOrderStatus.ASSIGNED, false, false)));
         var result = service.get(COURIER, DATE, "session");
-        assertThat(result.orders().getFirst().availableActions()).isEmpty();
+        assertThat(result.orders().getFirst().availableActions()).containsExactly("REASSIGN");
         assertThat(result.courier().availableActions()).isEmpty();
     }
     @Test void representativeActionsRespectStatusAndBothRefusals() {
         viewer(AppUserRole.REPRESENTATIVE, COURIER);
-        when(orders.findSchedule(COURIER, DATE)).thenReturn(List.of(
+        when(orders.findSchedule(eq(COURIER), eq(DATE), anyBoolean(), any())).thenReturn(List.of(
                 order(ServiceOrderStatus.ASSIGNED, false, false), order(ServiceOrderStatus.ASSIGNED, true, false),
                 order(ServiceOrderStatus.ARRIVED, false, true), order(ServiceOrderStatus.IN_PROGRESS, false, true),
                 order(ServiceOrderStatus.COMPLETED, false, false)));

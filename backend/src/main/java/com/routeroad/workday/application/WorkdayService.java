@@ -1,6 +1,5 @@
 package com.routeroad.workday.application;
 
-import com.routeroad.offices.api.OfficeView;
 import com.routeroad.simulation.application.ScenarioNotInitializedException;
 import com.routeroad.workday.api.WorkdayCounts;
 import com.routeroad.workday.api.WorkdayView;
@@ -9,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
+import java.util.Map;
 
 @Service
 public class WorkdayService {
@@ -25,13 +25,19 @@ public class WorkdayService {
         var context = scenario.get(requestedDate).orElseThrow(ScenarioNotInitializedException::new);
         var date = context.date();
         var clock = context.clock();
+        var algorithm = algorithm(context.config());
         var counts = reader.count(date);
-        var offices = reader.findOffices().stream().map(office -> new OfficeView(
-                office.id(), office.name(), office.address(), office.lat(), office.lon())).toList();
+        var offices = reader.findOffices().stream().map(WorkdayReader.Office::view).toList();
         return new WorkdayView(date, new WorkdayCounts(Math.toIntExact(counts.ordersTotal()),
                 Math.toIntExact(counts.ordersAssigned()), Math.toIntExact(counts.ordersCompleted()),
                 Math.toIntExact(counts.couriersTotal()), Math.toIntExact(counts.openAlerts())),
-                counts.hasRoutes(), offices, clock);
+                counts.hasRoutes(), algorithm, offices, clock);
     }
 
+    private static String algorithm(Map<String, Object> config) {
+        Object value = config.getOrDefault("algorithm", "greedy");
+        if ("greedy".equals(value) || "ortools".equals(value)) return (String) value;
+        // Persisted configuration is a server error, not an invalid client query.
+        throw new IllegalStateException("Invalid scenario algorithm configuration");
+    }
 }

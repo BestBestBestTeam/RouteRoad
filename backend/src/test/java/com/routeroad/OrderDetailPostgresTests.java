@@ -187,6 +187,8 @@ class OrderDetailPostgresTests {
         assertThat(body.get("alerts").size()).isEqualTo(1);
     }
     @Test void representativeTransitionGraphIsAppliedToTheCurrentOrder() throws Exception {
+        // This tests the ordinary graph; pending-alert restrictions have separate integration coverage.
+        jdbc.update("delete from alert_order where order_id=?",id(0x300,9));
         var expectations=Map.of("ASSIGNED",List.of("EN_ROUTE","REPORT_DELAY","REFUSE_ORDER"),
                 "EN_ROUTE",List.of("ARRIVED","REPORT_DELAY","REFUSE_ORDER"),
                 "ARRIVED",List.of("IN_PROGRESS","REPORT_DELAY","REFUSE_ORDER"),

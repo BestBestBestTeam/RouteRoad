@@ -27,9 +27,11 @@ public final class OrderReadSql {
                 s.reason_code AS "reasonCode", s.reason_text AS "reasonText", s.decided_by AS "decidedBy",
                 s.decision_created_at AS "decisionCreatedAt", s.courier_name AS "courierName",
                 s.actor_id AS "actorId", s.actor_name AS "actorName", s.actor_role AS "actorRole",
-                s.can_reassign AS "canReassign"
+                s.can_reassign AS "canReassign", s.reassign_deadline AS "reassignDeadline",
+                (s.reassign_deadline IS NOT NULL) AS "awaitingDecision"
             """;
     public static final String ROWS = SNAPSHOT + COLUMNS + FILTER + " ORDER BY s.number, s.id LIMIT :limit OFFSET :offset";
+    public static final String DAY = SNAPSHOT + COLUMNS + " FROM order_snapshot s ORDER BY s.number, s.id";
     public static final String DETAIL = DETAIL_SNAPSHOT + COLUMNS + " FROM order_snapshot s";
     public static final String SCHEDULE = com.routeroad.planning.infrastructure.ConfirmedOrderSnapshotSql.COURIER_SNAPSHOT
             + COLUMNS + """

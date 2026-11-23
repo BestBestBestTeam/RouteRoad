@@ -33,6 +33,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 class OrderDetailHttpTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -64,10 +73,10 @@ class OrderDetailHttpTests {
                 "representative", hash, "Representative", AppUserRole.REPRESENTATIVE, UUID.randomUUID())));
         when(realClock.instant()).thenReturn(Instant.parse("2026-11-15T07:00:10Z"));
         when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(SCENARIO, DATE,
-                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L)));
+                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L, java.util.Map.of())));
         when(reader.count(any())).thenReturn(new WorkdayReader.Counts(10, 7, 2, 5, 3, true));
         when(reader.findOffices()).thenReturn(List.of(new WorkdayReader.Office(UUID.randomUUID(), "Office", "Address", 55, 82)));
-        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean()))
+        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean(), any()))
                 .thenReturn(new com.routeroad.orders.application.OrderReader.Result(List.of(), 0));
     }
     private com.routeroad.orders.api.OrderView view(UUID courier, List<String> actions) {
@@ -82,10 +91,10 @@ class OrderDetailHttpTests {
     private UUID ownCourier() { return users.findByLogin("representative").orElseThrow().getCourierId(); }
     private void setupOrder(UUID courier) {
         when(orderReader.currentDate(ORDER)).thenReturn(Optional.of(DATE));
-        when(orderReader.findOne(eq(ORDER),eq(DATE),anyBoolean())).thenAnswer(call -> Optional.of(view(courier,
+        when(orderReader.findOne(eq(ORDER), eq(DATE), anyBoolean(), any())).thenAnswer(call -> Optional.of(view(courier,
                 Boolean.TRUE.equals(call.getArgument(2)) ? List.of("REASSIGN") : List.of())));
-        when(orderReader.refusals(ORDER,courier,DATE)).thenReturn(new com.routeroad.orders.application.OrderReader.Refusals(false,false));
-        when(orderAlerts.find(any(),any(),any(),anyBoolean())).thenReturn(List.of());
+        when(orderReader.actionContext(ORDER,courier,DATE)).thenReturn(new com.routeroad.orders.application.OrderReader.ActionContext(false, false, false));
+        when(orderAlerts.find(any(), any(), any(), anyBoolean(), any())).thenReturn(List.of());
     }
     private MockHttpSession login(String login) throws Exception {
         var bootstrap = mvc.perform(get("/api/me")).andExpect(status().isUnauthorized()).andReturn();
@@ -103,7 +112,7 @@ class OrderDetailHttpTests {
                 .andExpect(jsonPath("$.order.version").value("9007199254740993"))
                 .andExpect(jsonPath("$.order.assignment.plan_version").value("9007199254740993"))
                 .andExpect(jsonPath("$.clock.revision").value("9007199254740993"));
-        verify(orderReader,never()).find(any(),anyInt(),anyLong(),anyBoolean());
+        verify(orderReader,never()).find(any(), anyInt(), anyLong(), anyBoolean(), any());
     }
     @Test void ownRepresentativeGetsOnlyRepresentativeActions() throws Exception {
         UUID courier=ownCourier();setupOrder(courier);
@@ -111,7 +120,7 @@ class OrderDetailHttpTests {
                 .andExpect(jsonPath("$.order.available_actions[0]").value("EN_ROUTE"))
                 .andExpect(jsonPath("$.order.available_actions[1]").value("REPORT_DELAY"))
                 .andExpect(jsonPath("$.order.available_actions[2]").value("REFUSE_ORDER"));
-        verify(orderAlerts).find(ORDER,DATE,courier,false);
+        verify(orderAlerts).find(ORDER, DATE, courier, false, java.time.Instant.parse("2026-11-15T07:00:05Z"));
     }
     @Test void foreignOrderIsForbiddenWithoutReadingAlertsOrExposingData() throws Exception {
         setupOrder(UUID.randomUUID());
@@ -122,7 +131,7 @@ class OrderDetailHttpTests {
     }
     @Test void refusedOrderCanBeReadButNoCommandsAreOffered() throws Exception {
         UUID courier=ownCourier();setupOrder(courier);
-        when(orderReader.refusals(ORDER,courier,DATE)).thenReturn(new com.routeroad.orders.application.OrderReader.Refusals(true,false));
+        when(orderReader.actionContext(ORDER,courier,DATE)).thenReturn(new com.routeroad.orders.application.OrderReader.ActionContext(true, false, false));
         mvc.perform(get("/api/orders/"+ORDER).session(login("representative"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.order.assignment.courier_id").value(courier.toString()))
                 .andExpect(jsonPath("$.order.available_actions").isEmpty());
@@ -131,7 +140,7 @@ class OrderDetailHttpTests {
         setupOrder(ownCourier());
         mvc.perform(get("/api/orders/"+ORDER).param("date",DATE.minusDays(1).toString()).session(login("representative")))
                 .andExpect(status().isForbidden());
-        verify(orderReader,never()).findOne(ORDER,DATE.minusDays(1),false);
+        verify(orderReader,never()).findOne(ORDER, DATE.minusDays(1), false, java.time.Instant.parse("2026-11-15T07:00:05Z"));
         verifyNoInteractions(orderAlerts);
     }
     @Test void accountCourierIsReadAgainOnEveryRequest() throws Exception {

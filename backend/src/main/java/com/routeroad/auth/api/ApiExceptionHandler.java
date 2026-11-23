@@ -37,6 +37,21 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiError> forbidden(AccessDeniedException exception) {
         return ResponseEntity.status(403).body(ApiError.of("FORBIDDEN", "Недостаточно прав"));
     }
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ApiError> methodNotAllowed(org.springframework.web.HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).headers(exception.getHeaders())
+                .body(ApiError.of("METHOD_NOT_ALLOWED", "Метод не поддерживается"));
+    }
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    ResponseEntity<ApiError> resourceNotFound(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).headers(exception.getHeaders())
+                .body(ApiError.of("NOT_FOUND", "Ресурс не найден"));
+    }
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<ApiError> unsupportedMediaType(org.springframework.web.HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).headers(exception.getHeaders())
+                .body(ApiError.of("UNSUPPORTED_MEDIA_TYPE", "Неподдерживаемый тип содержимого"));
+    }
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> internal(Exception exception) {
         // Exception text may include request values or SQL parameters; never serialize it.

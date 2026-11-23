@@ -41,12 +41,12 @@ public class CourierScheduleService {
         }
         var courier = reader.findCourier(id).orElseThrow(CourierNotFoundException::new);
         var context = scenario.get(date).orElseThrow(ScenarioNotInitializedException::new);
-        var scheduled = orders.findSchedule(id, context.date());
         boolean currentDay = context.date().equals(context.scenarioDate());
+        var scheduled = orders.findSchedule(id, context.date(), !representative && currentDay, context.clock().now());
         var views = scheduled.stream().map(item -> item.order().withActions(representative
                 ? RepresentativeOrderActions.forOrder(item.order().status(), currentDay,
-                        item.refusals().orderRefused(), item.refusals().dayRefused())
-                : List.of())).toList();
+                        item.context().orderRefused(), item.context().dayRefused(), item.context().awaitingDecision())
+                : item.order().availableActions())).toList();
         var details = reader.details(courier, context.date(), views);
         var courierView = new CourierView(courier.id(), courier.name(), courier.officeId(),
                 courier.shiftStart(), courier.shiftEnd(), courier.position(), courier.available(), views.size(),

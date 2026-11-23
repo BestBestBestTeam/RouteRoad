@@ -10,5 +10,7 @@ public interface RouteStopRepository extends Repository<RouteStopEntity, RouteSt
 
     Optional<RouteStopEntity> findById(RouteStopId id);
 
+    List<RouteStopEntity> findById_RouteIdInOrderById_RouteIdAscId_SequenceAsc(java.util.Collection<UUID> routeIds);
+
     List<RouteStopEntity> findById_RouteIdOrderById_SequenceAsc(UUID routeId);
 }

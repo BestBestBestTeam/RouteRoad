@@ -24,7 +24,7 @@ class WorkdayServiceTests {
 
     private void scenario(Instant realAnchor, double speed) {
         when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(UUID.randomUUID(), date,
-                modelAnchor, realAnchor, speed, 9_007_199_254_740_993L)));
+                modelAnchor, realAnchor, speed, 9_007_199_254_740_993L, java.util.Map.of())));
         when(reader.count(any())).thenReturn(new WorkdayReader.Counts(0, 0, 0, 0, 0, false));
         when(reader.findOffices()).thenReturn(List.of());
     }

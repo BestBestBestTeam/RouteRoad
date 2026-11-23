@@ -33,6 +33,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 class CourierScheduleHttpTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -65,10 +74,10 @@ class CourierScheduleHttpTests {
                 "representative", hash, "Representative", AppUserRole.REPRESENTATIVE, UUID.randomUUID())));
         when(realClock.instant()).thenReturn(Instant.parse("2026-11-15T07:00:10Z"));
         when(scenarioReader.findCurrent()).thenReturn(Optional.of(new com.routeroad.simulation.application.ScenarioReader.Scenario(SCENARIO, DATE,
-                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L)));
+                Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T07:00:00Z"), 0.5, 9_007_199_254_740_993L, java.util.Map.of())));
         when(reader.count(any())).thenReturn(new WorkdayReader.Counts(10, 7, 2, 5, 3, true));
         when(reader.findOffices()).thenReturn(List.of(new WorkdayReader.Office(UUID.randomUUID(), "Office", "Address", 55, 82)));
-        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean()))
+        when(orderReader.find(any(), anyInt(), anyLong(), anyBoolean(), any()))
                 .thenReturn(new com.routeroad.orders.application.OrderReader.Result(List.of(), 0));
         when(courierReader.find(any(),anyInt(),anyLong()))
                 .thenReturn(new com.routeroad.couriers.application.CourierReader.Result(List.of(sample(true)),1));
@@ -96,7 +105,7 @@ class CourierScheduleHttpTests {
         var courier = new com.routeroad.couriers.application.CourierScheduleReader.Courier(COURIER, "Courier", OFFICE,
                 Instant.parse("2026-11-15T07:00:00Z"), Instant.parse("2026-11-15T16:00:00Z"), null, true);
         when(scheduleReader.findCourier(COURIER)).thenReturn(Optional.of(courier));
-        when(orderReader.findSchedule(eq(COURIER), any())).thenReturn(List.of());
+        when(orderReader.findSchedule(eq(COURIER), any(), anyBoolean(), any())).thenReturn(List.of());
         when(scheduleReader.details(eq(courier), any(), anyList())).thenReturn(
                 new com.routeroad.couriers.application.CourierScheduleReader.Details(null,
                         List.of(new com.routeroad.offices.api.OfficeView(OFFICE, "Office", "Address", 55, 82)), 0, false));
@@ -136,7 +145,7 @@ class CourierScheduleHttpTests {
     @Test void explicitDateIsPassedToAllScheduleQueries() throws Exception {
         mvc.perform(get(path(COURIER)).param("date", DATE.plusDays(1).toString()).session(login("dispatcher")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.date").value(DATE.plusDays(1).toString()));
-        verify(orderReader).findSchedule(COURIER, DATE.plusDays(1));
+        verify(orderReader).findSchedule(eq(COURIER), eq(DATE.plusDays(1)), anyBoolean(), any());
         verify(scheduleReader).details(any(), eq(DATE.plusDays(1)), anyList());
     }
     @Test void invalidUuidAndDatesAre400() throws Exception {

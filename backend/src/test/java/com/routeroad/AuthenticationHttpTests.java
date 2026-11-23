@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.json.JsonMapper;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +35,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("context-smoke")
 @AutoConfigureMockMvc
 class AuthenticationHttpTests {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
@@ -267,4 +277,56 @@ class AuthenticationHttpTests {
                 .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret database text"))));
     }
+    @Test void anonymousLogoutWithValidCsrfIsUnauthorized() throws Exception {
+        var client=anonymous();
+        var result=mvc.perform(post("/api/auth/logout").session(client.session()).header("X-CSRF-Token",client.token()))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED")).andReturn();
+        assertSafe(result);
+    }
+    @Test void bothRolesLogoutAndLoseTheirSessions() throws Exception {
+        for(String role:List.of("dispatcher","representative")) {
+            var client=login(role);
+            mvc.perform(post("/api/auth/logout").session(client.session()).header("X-CSRF-Token",client.token()))
+                    .andExpect(status().isNoContent()).andExpect(content().string(""));
+            assertThat(client.session().isInvalid()).isTrue();
+            mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        }
+    }
+    @Test void anonymousLogoutStillRequiresValidCsrf() throws Exception {
+        var client=anonymous();
+        mvc.perform(post("/api/auth/logout").session(client.session())).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("INVALID_CSRF"));
+        mvc.perform(post("/api/auth/logout").session(client.session()).header("X-CSRF-Token","invalid"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("INVALID_CSRF"));
+    }
+    @Test void unsupportedMethodsPreserveAllowAndSafeErrorEnvelope() throws Exception {
+        mvc.perform(get("/api/auth/login")).andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow",org.hamcrest.Matchers.containsString("POST")))
+                .andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED"));
+        var client=login("dispatcher");
+        for(String path:List.of("/api/orders","/api/couriers","/api/workday","/api/alerts","/api/history")) {
+            var result=mvc.perform(post(path).session(client.session()).header("X-CSRF-Token",client.token()))
+                    .andExpect(status().isMethodNotAllowed()).andExpect(header().string("Allow",org.hamcrest.Matchers.containsString("GET")))
+                    .andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED")).andReturn();
+            assertSafe(result);
+        }
+        mvc.perform(post("/api/orders").session(client.session())).andExpect(status().isForbidden());
+        mvc.perform(post("/api/orders")).andExpect(status().isForbidden()); // CSRF precedes MVC dispatch.
+        var anonymous=anonymous();
+        mvc.perform(post("/api/orders").session(anonymous.session()).header("X-CSRF-Token",anonymous.token()))
+                .andExpect(status().isUnauthorized());
+    }
+    @Test void confirmedStandardMvcErrorsKeepTheirClientStatus() throws Exception {
+        var client=login("dispatcher");
+        var missing=mvc.perform(get("/api/no-such-resource").session(client.session())).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("NOT_FOUND")).andReturn();
+        assertSafe(missing);
+        var anonymous=anonymous();
+        var media=mvc.perform(post("/api/auth/login").session(anonymous.session()).header("Origin","http://localhost")
+                .header("X-CSRF-Token",anonymous.token()).contentType("text/plain").content("private body"))
+                .andExpect(status().isUnsupportedMediaType()).andExpect(jsonPath("$.error.code").value("UNSUPPORTED_MEDIA_TYPE")).andReturn();
+        assertSafe(media);assertThat(media.getResponse().getContentAsString()).doesNotContain("private body");
+        mvc.perform(get("/api/me").session(client.session()).accept("application/xml")).andExpect(status().isNotAcceptable());
+    }
+
 }

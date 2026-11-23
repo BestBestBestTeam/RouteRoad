@@ -7,6 +7,8 @@ import com.routeroad.workday.application.WorkdayService;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +56,7 @@ class WorkdayPostgresTests {
     @Autowired RouteRepository routes;
     @Autowired AppUserRepository users;
     @Autowired JdbcTemplate jdbc;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @MockitoBean java.time.Clock realClock;
 
     private static UUID id(int group, int number) {
@@ -80,6 +83,7 @@ class WorkdayPostgresTests {
         jdbc.update("update scenario_state set revision = ?", 9_007_199_254_740_993L);
         var response = mvc.perform(get("/api/workday").session(login("repo-dispatcher")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.date").value("2099-11-09"))
+                .andExpect(jsonPath("$.algorithm").value("greedy"))
                 .andExpect(jsonPath("$.counts.orders_total").value(7)).andExpect(jsonPath("$.counts.orders_assigned").value(2))
                 .andExpect(jsonPath("$.counts.orders_completed").value(1)).andExpect(jsonPath("$.counts.couriers_total").value(2))
                 .andExpect(jsonPath("$.counts.open_alerts").value(1)).andExpect(jsonPath("$.has_routes").value(true))
@@ -87,7 +91,37 @@ class WorkdayPostgresTests {
                 .andExpect(jsonPath("$.clock.now").value("2099-11-09T09:00:10Z"))
                 .andExpect(jsonPath("$.clock.revision").value("9007199254740993")).andReturn();
         JsonNode body = json.readTree(response.getResponse().getContentAsString());
+        assertThat(body.properties().stream().map(Map.Entry::getKey).toList()).containsExactlyInAnyOrder(
+                "date", "counts", "has_routes", "algorithm", "offices", "clock");
         assertThat(body.get("clock").get("revision").isString()).isTrue();
+    }
+    @ParameterizedTest @ValueSource(strings = {"greedy", "ortools"})
+    void algorithmComesFromConfigAndDoesNotChangeOtherFields(String algorithm) throws Exception {
+        var before = service.get(DATE);
+        jdbc.update("update scenario_state set config=jsonb_set(config,'{algorithm}',to_jsonb(cast(? as text)))", algorithm);
+        // Direct fixture SQL bypasses the scenario entity loaded by the preceding baseline read.
+        entityManager.clear();
+        var stored = jdbc.queryForObject("select config::text from scenario_state", String.class);
+        var after = service.get(DATE);
+        assertThat(after.algorithm()).isEqualTo(algorithm);
+        assertThat(after).usingRecursiveComparison().ignoringFields("algorithm").isEqualTo(before);
+        mvc.perform(get("/api/workday").session(login("repo-dispatcher"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.algorithm").value(algorithm));
+        assertThat(jdbc.queryForObject("select config::text from scenario_state", String.class)).isEqualTo(stored);
+    }
+    @ParameterizedTest @ValueSource(strings = {"null", "42", "true", "[]", "{}", "\"GREEDY\"", "\"\"", "\"invalid\""})
+    void invalidPersistedAlgorithmReturns500AndDoesNotDefault(String value) throws Exception {
+        jdbc.update("update scenario_state set config=jsonb_set(config,'{algorithm}',cast(? as jsonb))", value);
+        var stored = jdbc.queryForObject("select config::text from scenario_state", String.class);
+        mvc.perform(get("/api/workday").session(login("repo-dispatcher"))).andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR")).andExpect(jsonPath("$.algorithm").doesNotExist());
+        assertThat(jdbc.queryForObject("select config::text from scenario_state", String.class)).isEqualTo(stored);
+    }
+    @Test void invalidAlgorithmDoesNotChangeOtherGetContracts() throws Exception {
+        jdbc.update("update scenario_state set config=cast(? as jsonb)", "{\"algorithm\":\"invalid\"}");
+        var session = login("repo-dispatcher");
+        for (String path : java.util.List.of("/api/orders", "/api/couriers", "/api/history"))
+            mvc.perform(get(path).session(session)).andExpect(status().isOk());
     }
     @Test void explicitDateFiltersOrdersAndAlertsButUsesCurrentScenarioClock() throws Exception {
         mvc.perform(get("/api/workday").param("date", DATE.plusDays(1).toString()).session(login("repo-dispatcher")))

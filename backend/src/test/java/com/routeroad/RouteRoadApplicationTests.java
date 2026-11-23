@@ -8,6 +8,15 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("context-smoke")
 class RouteRoadApplicationTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.HistoryReader historyReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.execution.application.AlertReader alertReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.routeroad.workday.application.WorkdayMapReader mapReader;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.routeroad.couriers.application.CourierScheduleReader scheduleReader;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
